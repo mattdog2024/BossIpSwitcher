@@ -99,6 +99,8 @@ internal sealed class SwitcherContext : ApplicationContext
         {
             CloseMarker(); SettingsStore.SetMode(false);
             await NetworkTools.ApplyAsync(settings.Adapter, "20.65.32.199", "255.255.255.0", "20.65.32.254");
+            // 切回固定 IP（"20 段"）后自动清空访问痕迹
+            TraceCleaner.CleanAll();
         }
     }
 
