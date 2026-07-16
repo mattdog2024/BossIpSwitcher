@@ -71,14 +71,28 @@ internal sealed class SwitcherContext : ApplicationContext
 {
     private const string Password = "ccisme520";
     private readonly KeyboardHook keyboard = new();
+    // 隐藏的 dispatcher form：用于把 hook 回调里的 UI 操作 marshal 回主消息循环。
+    // 钩子线程里同步 ShowDialog 会让系统键盘钩子被卸载（5 秒超时），用户再次按
+    // Ctrl+Alt+F10 时还会嵌套第二轮 OpenProtectedSettings，崩。BeginInvoke 解决。
+    private readonly Form dispatcher = new()
+    {
+        ShowInTaskbar = false,
+        FormBorderStyle = FormBorderStyle.None,
+        Opacity = 0,
+        WindowState = FormWindowState.Minimized,
+        Text = "BossIpSwitcherDispatcher",
+    };
     private AppSettings settings = SettingsStore.Load();
     private Process? marker;
     private bool alternateMode => File.Exists(Program.ModePath) && File.ReadAllText(Program.ModePath).Trim() == "alternate";
 
     public SwitcherContext()
     {
-        keyboard.TogglePressed += async () => await ToggleAsync();
-        keyboard.MenuPressed += OpenProtectedSettings;
+        // 先创建 handle（窗口不可见），之后 BeginInvoke 才会 marshal 到主线程
+        dispatcher.CreateControl();
+        // 钩子回调里只投递任务，不直接做 UI 工作
+        keyboard.TogglePressed += () => dispatcher.BeginInvoke(new Action(async () => await ToggleAsync()));
+        keyboard.MenuPressed += () => dispatcher.BeginInvoke(new Action(OpenProtectedSettings));
         keyboard.Start();
         if (string.IsNullOrWhiteSpace(settings.Adapter))
             MessageBox.Show("首次运行不会修改网络。请按 Ctrl+Alt+F10 选择网卡并设置备用网络。", "IP 锁定器");
@@ -111,7 +125,7 @@ internal sealed class SwitcherContext : ApplicationContext
         if (password.Value != Password) { MessageBox.Show("密码错误。", "IP 锁定器"); return; }
         settings = SettingsStore.Load();
         using var form = new SettingsForm(settings, NetworkTools.Adapters());
-        if (form.ShowDialog() == DialogResult.Abort) { ExitUi(); return; }
+        if (form.DialogResult == DialogResult.Abort) { ExitUi(); return; }
         if (form.DialogResult != DialogResult.OK) return;
         settings = form.Result; SettingsStore.Save(settings); ConfigureUiStartup(settings.StartWithWindows);
     }
