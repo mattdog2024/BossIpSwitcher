@@ -26,16 +26,30 @@ internal sealed class SettingsForm : Form
     public SettingsForm(AppSettings current, string[] adapters)
     {
         Result = current; Text = "IP 锁定器设置"; StartPosition = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = MinimizeBox = false; ClientSize = new Size(430, 285); TopMost = true;
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = MinimizeBox = false; ClientSize = new Size(430, 335); TopMost = true;
         adapter.Items.AddRange(adapters); adapter.Text = current.Adapter;
         ip.Text = current.AlternateIp; mask.Text = current.AlternateMask; gateway.Text = current.AlternateGateway; startup.Checked = current.StartWithWindows;
         AddRow("控制网卡：", adapter, 25); AddRow("备用 IP：", ip, 70); AddRow("子网掩码：", mask, 115); AddRow("默认网关：", gateway, 160);
         startup.SetBounds(112, 201, 180, 25); Controls.Add(startup);
-        var save = new Button { Text = "保存", Left = 168, Top = 240, Width = 75 };
-        var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, Left = 251, Top = 240, Width = 75 };
-        var exit = new Button { Text = "强制退出", Left = 334, Top = 240, Width = 80 };
+        var cleanBrowser = new Button { Text = "立即清浏览器历史", Left = 112, Top = 232, Width = 200, Height = 30 };
+        cleanBrowser.Click += (_, _) => CleanBrowserClicked();
+        Controls.Add(cleanBrowser);
+        var save = new Button { Text = "保存", Left = 168, Top = 290, Width = 75 };
+        var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, Left = 251, Top = 290, Width = 75 };
+        var exit = new Button { Text = "强制退出", Left = 334, Top = 290, Width = 80 };
         save.Click += (_, _) => SaveAndClose(); exit.Click += (_, _) => { DialogResult = DialogResult.Abort; Close(); };
         Controls.AddRange([save, cancel, exit]); CancelButton = cancel;
+    }
+
+    private void CleanBrowserClicked()
+    {
+        var confirm = MessageBox.Show(
+            "会强制关闭 Chrome / Edge，所有标签页、未保存内容和下载任务都会丢失。\n\n确定继续吗？",
+            "立即清浏览器", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        if (confirm != DialogResult.Yes) return;
+        TraceCleaner.CleanBrowserHistoryManual();
+        MessageBox.Show("已清理 Chrome / Edge 历史。\n\nCookie / 密码 / 扩展已保留。",
+            "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void AddRow(string label, Control control, int top)

@@ -6,18 +6,31 @@ namespace BossIpSwitcher;
 
 /// <summary>
 /// 切回固定 IP 时清空本机访问痕迹。所有操作静默失败，避免弹窗引起注意。
+/// <para>
+/// 浏览器（Chrome / Edge）历史 <b>不在自动清理范围内</b>——它需要强制关闭浏览器进程，
+/// 会丢掉所有标签页、下载、未保存内容。由用户在设置界面手动点「立即清浏览器」按钮触发。
+/// </para>
 /// </summary>
 internal static class TraceCleaner
 {
+    /// <summary>
+    /// 切回固定 IP 时自动清：不杀进程就能清的部分。
+    /// </summary>
     public static void CleanAll()
     {
-        // 浏览器必须先关，否则 SQLite 文件被锁
-        KillBrowserProcesses();
         try { CleanRunDialogHistory(); } catch (Exception ex) { Debug.WriteLine($"[TraceCleaner] RunMRU 清理失败：{ex.Message}"); }
-        try { CleanBrowserHistory(isChrome: true); } catch (Exception ex) { Debug.WriteLine($"[TraceCleaner] Chrome 清理失败：{ex.Message}"); }
-        try { CleanBrowserHistory(isChrome: false); } catch (Exception ex) { Debug.WriteLine($"[TraceCleaner] Edge 清理失败：{ex.Message}"); }
         try { CleanMstscHistory(); } catch (Exception ex) { Debug.WriteLine($"[TraceCleaner] mstsc 清理失败：{ex.Message}"); }
         try { CleanExplorerHistory(); } catch (Exception ex) { Debug.WriteLine($"[TraceCleaner] Explorer 清理失败：{ex.Message}"); }
+    }
+
+    /// <summary>
+    /// 手动清 Chrome / Edge 历史。会强制关闭浏览器，调用前必须经用户确认。
+    /// </summary>
+    public static void CleanBrowserHistoryManual()
+    {
+        try { KillBrowserProcesses(); } catch (Exception ex) { Debug.WriteLine($"[TraceCleaner] 杀浏览器进程失败：{ex.Message}"); }
+        try { CleanBrowserHistory(isChrome: true); } catch (Exception ex) { Debug.WriteLine($"[TraceCleaner] Chrome 清理失败：{ex.Message}"); }
+        try { CleanBrowserHistory(isChrome: false); } catch (Exception ex) { Debug.WriteLine($"[TraceCleaner] Edge 清理失败：{ex.Message}"); }
     }
 
     private static void KillBrowserProcesses()
