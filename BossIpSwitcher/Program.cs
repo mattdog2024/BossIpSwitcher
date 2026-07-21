@@ -100,13 +100,23 @@ internal sealed class SwitcherContext : ApplicationContext
     public SwitcherContext()
     {
         // 先创建 handle（窗口不可见），之后 BeginInvoke 才会 marshal 到主线程
-        dispatcher.CreateControl();
+        // CreateControl() alone does not guarantee a native handle for an invisible
+        // top-level Form. BeginInvoke requires that handle, so force it here while
+        // we are still on the UI thread.
+        _ = dispatcher.Handle;
         // 钩子回调里只投递任务，不直接做 UI 工作
-        keyboard.TogglePressed += () => dispatcher.BeginInvoke(new Action(async () => await ToggleAsync()));
-        keyboard.MenuPressed += () => dispatcher.BeginInvoke(new Action(OpenProtectedSettings));
+        keyboard.TogglePressed += () => PostToUi(async () => await ToggleAsync());
+        keyboard.MenuPressed += () => PostToUi(OpenProtectedSettings);
         keyboard.Start();
         if (string.IsNullOrWhiteSpace(settings.Adapter))
             MessageBox.Show("首次运行不会修改网络。请按 Ctrl+Alt+F10 选择网卡并设置备用网络。", "IP 锁定器");
+    }
+
+    private void PostToUi(Action action)
+    {
+        if (dispatcher.IsDisposed || !dispatcher.IsHandleCreated) return;
+        try { dispatcher.BeginInvoke(action); }
+        catch (InvalidOperationException) { }
     }
 
     private async Task ToggleAsync()
@@ -151,7 +161,7 @@ internal sealed class SwitcherContext : ApplicationContext
     private static bool Valid(string value) => IPAddress.TryParse(value, out var a) && a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
     private void CloseMarker() { try { if (marker is { HasExited: false }) marker.Kill(); } catch { } marker?.Dispose(); marker = null; }
     private void ExitUi() { CloseMarker(); keyboard.Dispose(); ExitThread(); }
-    protected override void Dispose(bool disposing) { if (disposing) { keyboard.Dispose(); marker?.Dispose(); } base.Dispose(disposing); }
+    protected override void Dispose(bool disposing) { if (disposing) { keyboard.Dispose(); marker?.Dispose(); dispatcher.Dispose(); } base.Dispose(disposing); }
 }
 
 internal static class SettingsStore
