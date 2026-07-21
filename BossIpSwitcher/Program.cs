@@ -42,8 +42,10 @@ internal sealed class AppSettings
 
 internal sealed class IpProtectionService : ServiceBase
 {
-    private readonly System.Timers.Timer timer = new(750) { AutoReset = true };
+    private readonly System.Timers.Timer timer = new(5000) { AutoReset = true };
     private int busy;
+    private int mismatchCount;
+    private DateTime lastApplyUtc = DateTime.MinValue;
     public IpProtectionService() { ServiceName = Program.ServiceName; CanStop = true; AutoLog = true; }
     protected override void OnStart(string[] args) { timer.Elapsed += async (_, _) => await GuardAsync(); timer.Start(); }
     protected override void OnStop() => timer.Stop();
@@ -59,8 +61,17 @@ internal sealed class IpProtectionService : ServiceBase
             var ip = alternate ? s.AlternateIp : "20.65.32.199";
             var mask = alternate ? s.AlternateMask : "255.255.255.0";
             var gateway = alternate ? s.AlternateGateway : "20.65.32.254";
-            if (!NetworkTools.HasNetwork(s.Adapter, ip, mask, gateway))
-                await NetworkTools.ApplyAsync(s.Adapter, ip, mask, gateway);
+            if (NetworkTools.HasAddress(s.Adapter, ip, mask))
+            {
+                mismatchCount = 0;
+                return;
+            }
+
+            mismatchCount++;
+            if (mismatchCount < 3 || DateTime.UtcNow - lastApplyUtc < TimeSpan.FromMinutes(1)) return;
+            lastApplyUtc = DateTime.UtcNow;
+            mismatchCount = 0;
+            await NetworkTools.ApplyAsync(s.Adapter, ip, mask, gateway);
         }
         catch { }
         finally { Interlocked.Exchange(ref busy, 0); }
@@ -152,10 +163,10 @@ internal static class SettingsStore
 internal static class NetworkTools
 {
     public static string[] Adapters() => NetworkInterface.GetAllNetworkInterfaces().Where(n => n.NetworkInterfaceType != NetworkInterfaceType.Loopback).Select(n => n.Name).Order().ToArray();
-    public static bool HasNetwork(string adapter, string ip, string mask, string gateway)
+    public static bool HasAddress(string adapter, string ip, string mask)
     {
         var p = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n => n.Name == adapter)?.GetIPProperties();
-        return p is not null && p.UnicastAddresses.Any(a => a.Address.ToString() == ip && a.IPv4Mask?.ToString() == mask) && p.GatewayAddresses.Any(g => g.Address.ToString() == gateway);
+        return p is not null && p.UnicastAddresses.Any(a => a.Address.ToString() == ip && a.IPv4Mask?.ToString() == mask);
     }
     public static async Task<bool> ApplyAsync(string adapter, string ip, string mask, string gateway)
     {
