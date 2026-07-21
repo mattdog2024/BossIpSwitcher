@@ -136,8 +136,9 @@ internal sealed class SwitcherContext : ApplicationContext
         if (password.Value != Password) { MessageBox.Show("密码错误。", "IP 锁定器"); return; }
         settings = SettingsStore.Load();
         using var form = new SettingsForm(settings, NetworkTools.Adapters());
-        if (form.DialogResult == DialogResult.Abort) { ExitUi(); return; }
-        if (form.DialogResult != DialogResult.OK) return;
+        var result = form.ShowDialog();
+        if (result == DialogResult.Abort) { ExitUi(); return; }
+        if (result != DialogResult.OK) return;
         settings = form.Result; SettingsStore.Save(settings); ConfigureUiStartup(settings.StartWithWindows);
     }
 
